@@ -1,5 +1,5 @@
-/dev/sdb
-0  --auto-detect the device capacity
+/tmp/bigfile
+1  --auto-detect the device capacity
 $  --end-of-dev
 0  --bloom-container
 0  --l-0

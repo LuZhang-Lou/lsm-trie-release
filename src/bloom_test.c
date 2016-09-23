@@ -139,6 +139,7 @@ multi_level_false_positive_test(void)
 
   uint64_t * const keys = (typeof(keys))malloc(sizeof(keys[0]) * nr_all_keys);
   struct BloomFilter *bfs[nr_levels] = {NULL};
+  // memset(bfs, 0, sizeof(struct BloomFilter *)*nr_levels);
 
   for (uint64_t l = 0; l < nr_levels; l++) {
     bfs[l] = bloom_create(nr_keys, p);
