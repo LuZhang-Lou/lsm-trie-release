@@ -43,11 +43,11 @@ table_test(const uint64_t max_value_size)
   kv.pk = key;
   kv.pv = value;
   uint64_t count = 0;
-  while (true) {
+  while (true) { // insert until table full
     sprintf((char *)key, "%016" PRIx64, count);
     kv.vlen = gi->next(gi);
     const bool ri = table_insert_kv_safe(table, &kv);
-    if (ri == false) {
+    if (ri == false) { // full
       break;
     }
     count++;
@@ -85,6 +85,10 @@ table_test(const uint64_t max_value_size)
   const double t4 = debug_time_sec();
   //metatable
   assert(rdm);
+
+  /****************
+   *  LOAD && READ
+   */
   const int fd_in = open("/tmp/raw", O_RDONLY | O_LARGEFILE, 00666);
   struct Stat stat;
   bzero(&stat, sizeof(stat));

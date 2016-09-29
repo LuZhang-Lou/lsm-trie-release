@@ -41,7 +41,7 @@ struct Item {
   uint16_t volume;
   uint16_t klen;
   uint16_t vlen;
-  uint8_t hash[HASHBYTES];
+  uint8_t hash[HASHBYTES]; // 8 * 20 = 160 bits
   uint8_t kv[]; // len(kv) == klen + vlen
 };
 
@@ -228,12 +228,13 @@ rawitem_init(struct RawItem * const raw, const uint8_t * const ptr)
   raw->vlen = vlen;
   raw->pk = pk;
   raw->pv = pv;
-  raw->limit = ptr + ((long)BARREL_CAP);
+  raw->limit = ptr + ((long)BARREL_CAP);  // ??
   return true;
 }
 
   static bool
 rawitem_next(struct RawItem * const rawitem)
+  // rawitem:   klen/vlen/data/klen/vlen/data
 {
   const uint8_t * const pklen = rawitem->pv + rawitem->vlen;
   if (pklen >= rawitem->limit) {
@@ -402,7 +403,7 @@ barrel_dump_buffer(struct Barrel * const barrel, uint8_t * const buffer)
     struct Item * iter = barrel->items[i];
     while (iter) {
       uint8_t * const pnext = item_encode(iter, ptr);
-      assert(pnext <= (buffer + (long)BARREL_CAP));
+      assert(pnext <= (buffer + (long)BARREL_CAP)); // Why to care about this?
       ptr = pnext;
       iter = iter->next;
       nr_items++;
@@ -410,11 +411,12 @@ barrel_dump_buffer(struct Barrel * const barrel, uint8_t * const buffer)
   }
   assert(ptr >= buffer);
 
-  // get ride of valgrind warning
+  // get ride of valgrind warning  // ???????
   if (ptr < (buffer + ((long)BARREL_CAP))) {
     bzero(ptr, (buffer + (long)BARREL_CAP) - ptr);
     ptr = encode_uint16(ptr, 0);
   }
+
   // put metadata
   ptr = buffer + ((long)BARREL_CAP);
   struct MetaIndex * const mi = (typeof(mi))ptr;
@@ -672,16 +674,16 @@ retaining_move_barrels(struct Barrel * const br, struct Barrel * const bl)
   qsort_r(ir, nr_r, sizeof(ir[0]), __compare_hash_order, &(br->id));
   uint64_t i = 0;
   while(br->volume > BARREL_CAP) {
-    if (i >= nr_r) return false;
+    if (i >= nr_r) return false; // why would this happen? In this point, br->volumn should be zero.
     barrel_erase(br, ir[i]);
     barrel_insert(bl, ir[i]);
     ir[i]->nr_moved++;
     i++;
   }
   br->nr_out = i;
-  br->rid = bl->id;
+  br->rid = bl->id; // host id
   assert(i < nr_r);
-  br->min = item_hash_order(ir[i], br->id);
+  br->min = item_hash_order(ir[i], br->id); // min is the indicator of the beginning of physical items
   return true;
 }
 
@@ -692,13 +694,13 @@ retaining_move_sorted(struct Barrel ** const barrels)
   uint16_t rid = TABLE_NR_BARRELS - 1;
   while ((barrels[rid]->volume > BARREL_CAP) && (lid < rid)) {
     assert(barrels[rid]->nr_out == 0);
-    while (barrels[lid]->nr_out > 0) lid++;
+    while (barrels[lid]->nr_out > 0) lid++; // self full
     if (lid >= rid) {
       break;
     }
     struct Barrel * const br = barrels[rid];
     struct Barrel * const bl = barrels[lid];
-    const bool rm = retaining_move_barrels(br, bl);
+    const bool rm = retaining_move_barrels(br, bl); // Weird, no conisder for barresl[lid] overflow after reput
 
     if (rm == false) return false;
     rid--;
@@ -733,8 +735,8 @@ retaining_nr_todo(struct Table * const table)
     nr_out += table->barrels[i].nr_out;
   }
   const uint64_t nr_covered = nr_all - nr_out;
-  const uint64_t nr_cover = (typeof(nr_cover))(((double)nr_all) * METAINDEX_PERCENT);
-  const uint64_t nr_remains = (nr_cover > nr_covered) ? (nr_cover - nr_covered) : 0;
+  const uint64_t nr_cover = (typeof(nr_cover))(((double)nr_all) * METAINDEX_PERCENT); //??
+  const uint64_t nr_remains = (nr_cover > nr_covered) ? (nr_cover - nr_covered) : 0; //?
   return nr_remains;
 }
 
@@ -765,6 +767,7 @@ retaining_build_metaindex(struct Table * const table)
   struct MetaIndex mi_buf[TABLE_MAX_BARRELS];
   bzero(mi_buf, sizeof(mi_buf[0]) * TABLE_MAX_BARRELS);
   // copy index
+  // L: build overflown metadata for all overflown barrels
   uint64_t nr_mi = 0;
   for (uint64_t i = 0; i < METAINDEX_MAX_NR ; i++) {
     struct Barrel * const barrel = barrels[i];
@@ -789,8 +792,9 @@ retaining_build_metaindex(struct Table * const table)
 table_retain(struct Table * const table)
 {
   uint64_t count = 0;
+  // Put overflow items in other buckets
   while (true) {
-    if (count >= 100) return false;
+    if (count >= 100) return false; //?
     struct Barrel *barrels[TABLE_NR_BARRELS];
     retaining_sort_barrels_by_volume(table, barrels);
     if (barrels[TABLE_NR_BARRELS-1]->volume <= BARREL_CAP) break; // done
@@ -806,10 +810,10 @@ table_retain(struct Table * const table)
 table_dump_barrels(struct Table * const table, const int fd, const uint64_t off)
 {
   uint64_t nr_all_items = 0;
-  for (uint64_t j = 0; j < TABLE_NR_BARRELS; j += TABLE_NR_IO) {
+  for (uint64_t j = 0; j < TABLE_NR_BARRELS; j += TABLE_NR_IO) { // why 2048 a batch?
     const uint64_t nr_dump = ((j + TABLE_NR_IO) > TABLE_NR_BARRELS)?(TABLE_NR_BARRELS - j):TABLE_NR_IO;
     for (uint64_t i = 0; i < nr_dump; i++) {
-      uint8_t * const ptr = &(table->io_buffer[BARREL_ALIGN * i]);
+      uint8_t * const ptr = &(table->io_buffer[BARREL_ALIGN * i]); // Get the beginning pointer of io_buffer
       const uint64_t nr_items = barrel_dump_buffer(&(table->barrels[j+i]), ptr);
       nr_all_items += nr_items;
     }
@@ -1052,23 +1056,28 @@ metatable_recursive_lookup(struct MetaTable * const mt, const uint16_t bid, uint
   assert(bid < TABLE_NR_BARRELS);
   const uint32_t hash32 = __hash_order(hash, bid);
 
+  // Find if recorded in overflown MetaIndex
   const struct MetaIndex * const mi0 = __find_metaindex(mt->mfh.nr_mi, mt->mis, bid);
-  const bool fetch0 = (mi0 == NULL) || (hash32 >= mi0->min);
-  if (fetch0) {
+  const bool fetch0 = (mi0 == NULL) || (hash32 >= mi0->min); // not in overflown list, OR bid is the final barrel
+  if (fetch0) { // not in overflown list, OR migrated again
     const bool rf = raw_barrel_fetch(mt, bid, buf);
     assert(rf);
   }
   const struct MetaIndex * const mi = mi0?mi0:raw_barrel_metaindex(buf);
-  if (hash32 < mi->min) { // mast be in another barrel
+
+  // min0 != NULL && hash32 < mi->min
+  if (hash32 < mi->min) { // must be in another barrel, use rid to recursively search that one
     assert(mi->id != mi->rid);
     return metatable_recursive_lookup(mt, mi->rid, buf, klen, key, hash);
   }
 
+  // min0 != NULL && hash32 >= mi->min
   if (fetch0 == false) {
     const bool rf = raw_barrel_fetch(mt, bid, buf);
     assert(rf);
   }
   struct KeyValue * const kv = raw_barrel_lookup(klen, key, buf);
+  // It means when hash32 == mi->min, it may or may not in that barrel
   if ((kv == NULL) && (hash32 == mi->min) && (mi->id != mi->rid)) {// maybe in another barrel
     return metatable_recursive_lookup(mt, mi->rid, buf, klen, key, hash);
   } else { // must in current barrel

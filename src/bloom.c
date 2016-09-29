@@ -46,7 +46,7 @@ bloom_bytes_to_bits(const uint32_t len)
   struct BloomFilter *
 bloom_create(const uint32_t nr_keys, struct Mempool * const mempool)
 {
-  const uint32_t bytes0 = (nr_keys * BITS_PER_KEY + 7) >> 3;
+  const uint32_t bytes0 = (nr_keys * BITS_PER_KEY + 7) >> 3; // ceiling
   const uint32_t bytes = (bytes0 < 8u)?8u:bytes0; // align
 
   struct BloomFilter *const bf = (typeof(bf))mempool_alloc(mempool, sizeof(*bf) + bytes);
@@ -111,7 +111,7 @@ bloomtable_build(struct BloomFilter * const * const bfs, const uint64_t nr_bf)
   bt->nr_bytes = all_bytes;
 
   //
-  uint8_t * const raw_bf = (typeof(raw_bf))malloc(all_bytes + 8u);
+  uint8_t * const raw_bf = (typeof(raw_bf))malloc(all_bytes + 8u); // why 8 u ??
   assert(raw_bf);
   uint8_t * ptr = raw_bf;
   for (uint64_t i = 0; i < nr_bf; i++) {

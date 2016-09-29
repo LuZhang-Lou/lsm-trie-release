@@ -14,6 +14,7 @@
 
 #include "coding.h"
 
+// return end position (exclusive)
   uint8_t*
 encode_uint64(uint8_t * const dst, const uint64_t v)
 {
