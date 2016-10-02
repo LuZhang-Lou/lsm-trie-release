@@ -60,8 +60,9 @@ containermap_probe(struct ContainerMap * const cm, const int raw_fd)
   const int r = fstat(raw_fd, &st);
   assert(0 == r);
   if (S_ISBLK(st.st_mode)) { // block device
+    // Determine the size of a raw device
     ioctl(raw_fd, BLKGETSIZE64, &(cm->total_cap));
-    cm->discard = true;
+    cm->discard = true; // ???
   } else { // regular file
     cm->total_cap = st.st_size;
     cm->discard = false;
@@ -81,7 +82,7 @@ containermap_create(const char * const raw_fn, const uint64_t cap_hint)
   const bool rp = containermap_probe(&cm0, raw_fd);
   if (rp == false) return NULL;
 
-  const size_t nr_bytes = (cm0.nr_units + 7u) >> 3;
+  const size_t nr_bytes = (cm0.nr_units + 7u) >> 3; // ceiling. What's for the bits/?
   struct ContainerMap * const cm = (typeof(cm))malloc(sizeof(*cm) + nr_bytes);
   bzero(cm, sizeof(*cm) + nr_bytes);
   cm->nr_units = cm0.nr_units;

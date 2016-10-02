@@ -85,7 +85,7 @@ struct DB {
   struct VirtualContainer *vcroot;
 
   // locks
-  pthread_mutex_t mutex_active;  // lock on dumpping active table
+  pthread_mutex_t mutex_active;  // lock on dumping active table
   pthread_mutex_t mutex_current; // lock on operating on active and vcroot
   pthread_mutex_t mutex_root; // lock on compacting root
   pthread_mutex_t mutex_token[DB_COMPACTION_NR];
@@ -425,6 +425,7 @@ db_initial(struct DB * const db, const char * const meta_dir, struct ContainerMa
     db->cms[i] = db->cms_dump[cm_conf->data_id[i]];
     assert(db->cms[i]);
   }
+  // set bloomcontainer
   db->cm_bc = db->cms_dump[cm_conf->bc_id]; // hi?
   assert(db->cm_bc);
 
@@ -436,7 +437,7 @@ db_initial(struct DB * const db, const char * const meta_dir, struct ContainerMa
   pthread_mutex_init(&(db->mutex_active), NULL);
   pthread_mutex_init(&(db->mutex_current), NULL);
   pthread_mutex_init(&(db->mutex_root), NULL);
-  for (uint64_t i = 0; i < DB_COMPACTION_NR; i++) {
+  for (uint64_t i = 0; i < DB_COMPACTION_NR; i++) { // What's DB_COMPACTION_NR;
     pthread_mutex_init(&(db->mutex_token[i]), NULL);
   }
   // rwlock
@@ -658,12 +659,12 @@ compaction_feed(struct Compaction * const comp)
 {
   const uint64_t token = __sync_fetch_and_add(&(comp->feed_token), DB_FEED_UNIT);
   assert(token < TABLE_MAX_BARRELS);
-  struct MetaTable * const mt = comp->mts_old[comp->feed_id];
+  struct MetaTable * const mt = comp->mts_old[comp->feed_id]; // I think feed_id is the container id to be compacted
   if (token >= TABLE_NR_BARRELS) return true;
-  const uint64_t nr_fetch = ((TABLE_NR_BARRELS - token) < DB_FEED_UNIT) ? (TABLE_NR_BARRELS - token) : DB_FEED_UNIT;
+  const uint64_t nr_to_fetch = ((TABLE_NR_BARRELS - token) < DB_FEED_UNIT) ? (TABLE_NR_BARRELS - token) : DB_FEED_UNIT;
   uint8_t * const arena = comp->arena + (token * BARREL_ALIGN);
-  assert((token + nr_fetch) <= TABLE_NR_BARRELS);
-  metatable_feed_barrels_to_tables(mt, token, nr_fetch, arena, comp->tables, compaction_select_table, comp->sub_bit);
+  assert((token + nr_to_fetch) <= TABLE_NR_BARRELS);
+  metatable_feed_barrels_to_tables(mt, token, nr_to_fetch, arena, comp->tables, compaction_select_table, comp->sub_bit);
   return true;
 }
 
@@ -954,7 +955,7 @@ thread_compaction(void *ptr)
       pthread_cond_broadcast(&(db->cond_root_producer));
       pthread_cond_wait(&(db->cond_root_consumer), &(db->mutex_current));
     }
-    if (db->closing && (vc_count_feed(db->vcroot) == 0)) {
+    if (db->closing && (vc_count_feed(db->vcroot) == 0)) { // close
       pthread_mutex_unlock(&(db->mutex_current));
       pthread_mutex_unlock(&(db->mutex_root));
       break;
@@ -1282,7 +1283,7 @@ db_load(const char * const meta_dir, struct ContainerMapConf * const cm_conf)
 }
 
 // get a DB * for GET/SET
-// cap_hint: only ragular files are affected. raw disk/ssd are all seen as its real cap
+// cap_hint: only regular files are affected. raw disk/ssd (disk device) are all seen as its real cap
   void
 db_spawn_threads(struct DB * const db)
 {
@@ -1336,12 +1337,12 @@ db_load_cm_conf(const char * const fn)
 
   assert(buf[0] == '$');
   // bc
-  buf[0] = 0;
+  buf[0] = 0; // The first line indicates the device used by bloom-container.
   fgets(buf, 1000, fi);
   const uint64_t bc_id = strtoull(buf, NULL, 10);
   assert(bc_id < count);
   cm_conf->bc_id = bc_id;
-  // 0-4
+  // 0-4 // The rest five lines indicates the mapping from level-0 to level-4.
   for (int i = 0; i < DB_NR_LEVELS; i++) {
     buf[0] = 0;
     fgets(buf, 1000, fi);

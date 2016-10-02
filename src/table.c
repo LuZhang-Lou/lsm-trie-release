@@ -700,7 +700,7 @@ retaining_move_sorted(struct Barrel ** const barrels)
     }
     struct Barrel * const br = barrels[rid];
     struct Barrel * const bl = barrels[lid];
-    const bool rm = retaining_move_barrels(br, bl); // Weird, no conisder for barresl[lid] overflow after reput
+    const bool rm = retaining_move_barrels(br, bl);
 
     if (rm == false) return false;
     rid--;
@@ -764,8 +764,9 @@ retaining_build_metaindex(struct Table * const table)
   // sort by out, big->small
   qsort(barrels, TABLE_NR_BARRELS, sizeof(barrels[0]), __compare_out);
   uint64_t nr_todo = (typeof(nr_todo))retaining_nr_todo(table);
-  struct MetaIndex mi_buf[TABLE_MAX_BARRELS];
+  struct MetaIndex mi_buf[TABLE_MAX_BARRELS]; // Why not METAINDEX_MAX_NR???
   bzero(mi_buf, sizeof(mi_buf[0]) * TABLE_MAX_BARRELS);
+
   // copy index
   // L: build overflown metadata for all overflown barrels
   uint64_t nr_mi = 0;
@@ -794,7 +795,7 @@ table_retain(struct Table * const table)
   uint64_t count = 0;
   // Put overflow items in other buckets
   while (true) {
-    if (count >= 100) return false; //?
+    if (count >= 100) return false; //? outside: assert(true);
     struct Barrel *barrels[TABLE_NR_BARRELS];
     retaining_sort_barrels_by_volume(table, barrels);
     if (barrels[TABLE_NR_BARRELS-1]->volume <= BARREL_CAP) break; // done
@@ -1125,6 +1126,9 @@ metatable_free(struct MetaTable * const mt)
   free(mt);
 }
 
+  /*
+   * metatable_feed_barrels_to_tables(mt, token, nr_to_fetch, arena, comp->tables, compaction_select_table, comp->sub_bit);
+   * */
   bool
 metatable_feed_barrels_to_tables(struct MetaTable * const mt, const uint16_t start,
     const uint16_t nr, uint8_t * const arena, struct Table * const * const tables,
